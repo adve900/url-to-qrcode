@@ -188,6 +188,19 @@
   <div class="view" id="mailView">
     <div class="grid">
       <div class="card">
+        <label>编码方式</label>
+        <div class="ec" id="mailMode">
+          <button data-mode="full" class="on">完整邮件</button>
+          <button data-mode="short">短链跳转</button>
+        </div>
+        <div id="shortBaseRow" style="display:none;margin-top:4px">
+          <label>支持页地址（短链模式）</label>
+          <input type="text" id="mailShortBase" value="https://adve900.github.io/url-to-qrcode/support.html" />
+          <div class="hint" style="text-align:left;color:var(--muted);min-height:0;margin-top:6px">
+            短链模式：二维码只编码支持页短链（模块更少、打印更易扫），扫码后由支持页自动跳转邮件应用。
+            邮件正文由支持页按默认模板生成，自定义标题 / 手动编辑内容仅在「完整邮件」模式生效。
+          </div>
+        </div>
         <label>收件邮箱（必填）</label>
         <input type="text" id="mailTo" placeholder="support@dsoon.com" />
         <label>Product Model（必填）</label>
@@ -2937,6 +2950,7 @@ var qrcode = function() {
   var emailCanvas=null, emailSvg=null, emailMailto='';
   var emailLogoDataUrl='', emailLogoImg=null;
   var mailManual=false;   // 邮件内容是否被用户手动编辑
+  var mailMode='full';    // 'full' = 完整 mailto；'short' = 短链跳转
   var mailSaved=false, lastMailEntry=null, lastMailSig='';   // 邮件二维码是否已于下载时存入目录
   function buildMailBody(model, name){
     return 'Hello,\n' +
@@ -2990,22 +3004,31 @@ var qrcode = function() {
     var to=$('mailTo').value.trim();
     var model=$('mailModel').value.trim();
     var name=$('mailName').value.trim();
-    var custom=$('mailSubject').value.trim();
     mailHintEl.textContent='';
     if(!to){ emailCanvas=null; emailSvg=null; emailMailto=''; $('mailQrbox').innerHTML=''; mailHintEl.textContent='请填写收件邮箱'; return; }
     if(!model){ emailCanvas=null; emailSvg=null; emailMailto=''; $('mailQrbox').innerHTML=''; mailHintEl.textContent='请填写 Product Model'; return; }
     if(!name){ emailCanvas=null; emailSvg=null; emailMailto=''; $('mailQrbox').innerHTML=''; mailHintEl.textContent='请填写 Product Name'; return; }
-    var parsed=parseMailPreview();
-    var subject=parsed.subject, body=parsed.body;
-    var mailto=buildMailto(to, subject, body);
+    var qtext;
+    if(mailMode==='short'){
+      var base=$('mailShortBase').value.trim()||'https://adve900.github.io/url-to-qrcode/support.html';
+      if(!/^https?:\/\//i.test(base)){ emailCanvas=null; emailSvg=null; emailMailto=''; $('mailQrbox').innerHTML=''; mailHintEl.textContent='支持页地址需以 http(s):// 开头'; return; }
+      base=base.replace(/\/+$/,'');
+      qtext=base+'?to='+encodeURIComponent(to)+'&m='+encodeURIComponent(model)+'&n='+encodeURIComponent(name);
+    } else {
+      var parsed=parseMailPreview();
+      qtext=buildMailto(to, parsed.subject, parsed.body);
+    }
     var ecLevel = emailLogoDataUrl ? 'H' : 'M';
     try{
-      var res=makeQR({text:mailto, ecLevel:ecLevel, size:320, margin:4, fg:'#000000', bg:'#ffffff', logoDataUrl:emailLogoDataUrl, logoImg:emailLogoImg});
+      var res=makeQR({text:qtext, ecLevel:ecLevel, size:320, margin:4, fg:'#000000', bg:'#ffffff', logoDataUrl:emailLogoDataUrl, logoImg:emailLogoImg});
       $('mailQrbox').innerHTML=''; $('mailQrbox').appendChild(res.canvas);
-      emailCanvas=res.canvas; emailSvg=res.svg; emailMailto=mailto;
-      lastMailEntry={ text:mailto, ec:ecLevel||'M', size:320, margin:4, fg:'#000000', bg:'#ffffff', logo:emailLogoDataUrl||'',
+      emailCanvas=res.canvas; emailSvg=res.svg; emailMailto=qtext;
+      lastMailEntry={ text:qtext, ec:ecLevel||'M', size:320, margin:4, fg:'#000000', bg:'#ffffff', logo:emailLogoDataUrl||'',
         kind:'email', mailTo:to, mailModel:model, mailName:name, ts:Date.now() };
-      mailSaved=false; lastMailSig=mailto;   // 标记为未存入目录，等待下载
+      mailSaved=false; lastMailSig=qtext;   // 标记为未存入目录，等待下载
+      if(mailMode==='short'){
+        mailHintEl.textContent='短链模式：共 '+qtext.length+' 字符，模块更少、打印更易扫。二维码编码的是支持页短链。';
+      }
     }catch(e){
       emailCanvas=null; emailSvg=null; emailMailto='';
       mailHintEl.textContent='生成失败：'+(e&&e.message?e.message:e);
@@ -3020,6 +3043,15 @@ var qrcode = function() {
     if(catalogVisible()) renderCatalog();
   }
   $('mailGenBtn').addEventListener('click', renderEmail);
+  $('mailMode').addEventListener('click', function(ev){
+    if(ev.target && ev.target.dataset.mode){
+      mailMode = ev.target.dataset.mode;
+      Array.prototype.forEach.call(this.children, function(b){ b.classList.remove('on'); });
+      ev.target.classList.add('on');
+      $('shortBaseRow').style.display = mailMode==='short' ? 'block' : 'none';
+      mailHintEl.textContent='';
+    }
+  });
   ['mailTo','mailModel','mailName','mailSubject'].forEach(function(id){
     $(id).addEventListener('input', function(){ updateMailPreview(); });
   });
